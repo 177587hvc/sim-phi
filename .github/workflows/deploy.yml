@@ -1,36 +1,63 @@
-name: NodeJS with Vite
+name: Deploy to GitHub Pages
 
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x]
-
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-    - name: Login to GitHub Package Registry
-      run: echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> ~/.npmrc
+      - name: Install main project dependencies
+        run: npm install
 
-    - name: Build
-      run: |
-        npm install
-        npm run build
+      - name: Build @sim-phi/extends in isolation
+        run: |
+          set -e
+          git clone https://github.com/sim-phi/extends.git /tmp/extends-build
+          cd /tmp/extends-build
+          npm install
+          npx vite build
+          rm -rf "$GITHUB_WORKSPACE/node_modules/@sim-phi/extends"
+          mkdir -p "$GITHUB_WORKSPACE/node_modules/@sim-phi"
+          cp -r /tmp/extends-build "$GITHUB_WORKSPACE/node_modules/@sim-phi/extends"
 
-    - name: Deploy
-      uses: JamesIves/github-pages-deploy-action@v4.4.1
-      with:
-        folder: dist
+      - name: Build main project (skip tsc)
+        run: npx vite build && node scripts/build.js
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
