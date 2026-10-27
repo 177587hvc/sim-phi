@@ -1,4 +1,7 @@
 {
+  "engines": {
+  "node": "20.x"
+  }
   "name": "sim-phi-vite",
   "private": true,
   "version": "1.5.9.2",
